@@ -1,0 +1,19 @@
+### Health Check
+GET http://localhost:5000/health
+
+### Login
+POST http://localhost:5000/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "Admin@123"
+}
+
+### Get Profile (avec token)
+GET http://localhost:5000/api/auth/profile
+Authorization: Bearer {TOKEN}
+
+### Get All Users
+GET http://localhost:5000/api/users
+Authorization: Bearer {TOKEN}
