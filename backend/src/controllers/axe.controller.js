@@ -50,15 +50,35 @@ const getById = async (req, res) => {
   }
 };
 
-// Créer un axe
+// Créer un axe (AVEC BUDGET)
 const create = async (req, res) => {
   try {
-    const { name_ar, description, code, color, order } = req.body;
+    console.log('📝 Création d\'un axe par:', req.user.id);
+    console.log('📝 Données reçues:', req.body);
+
+    const { 
+      name_ar, 
+      description, 
+      code, 
+      color, 
+      order,
+      budget_total,
+      budget_currency,
+      budget_warning_threshold 
+    } = req.body;
 
     if (!name_ar) {
       return res.status(400).json({
         success: false,
         message: 'Le nom de l\'axe est requis',
+      });
+    }
+
+    // Validation du budget
+    if (budget_total && budget_total < 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Le budget total doit être supérieur ou égal à 0',
       });
     }
 
@@ -68,11 +88,26 @@ const create = async (req, res) => {
       code: code || '',
       color: color || '#6366f1',
       order: order || 0,
+      budget_total: budget_total || 0,
+      budget_used: 0,
+      budget_currency: budget_currency || 'TND',
+      budget_warning_threshold: budget_warning_threshold || 10,
       created_by: req.user.id,
       is_active: true,
     });
 
-    res.status(201).json({ success: true, axe });
+    console.log('✅ Axe créé:', axe.id);
+    if (axe.hasBudget()) {
+      console.log(`💰 Budget total: ${axe.budget_total} ${axe.budget_currency}`);
+    }
+
+    res.status(201).json({ 
+      success: true, 
+      axe,
+      message: axe.hasBudget() 
+        ? `Axe créé avec un budget de ${axe.budget_total} ${axe.budget_currency}`
+        : 'Axe créé sans budget'
+    });
   } catch (error) {
     console.error('❌ Erreur create axe:', error);
     res.status(500).json({ success: false, message: error.message });
@@ -85,6 +120,18 @@ const update = async (req, res) => {
     const axe = await Axe.findByPk(req.params.id);
     if (!axe) {
       return res.status(404).json({ success: false, message: 'Axe non trouvé' });
+    }
+
+    // Si le budget total est modifié, vérifier qu'il n'est pas inférieur à l'utilisé
+    if (req.body.budget_total !== undefined) {
+      const newTotal = parseFloat(req.body.budget_total);
+      const used = parseFloat(axe.budget_used || 0);
+      if (newTotal < used) {
+        return res.status(400).json({
+          success: false,
+          message: `Le budget total (${newTotal}) ne peut pas être inférieur au budget déjà utilisé (${used})`,
+        });
+      }
     }
 
     await axe.update(req.body);
@@ -105,7 +152,6 @@ const deleteAxe = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Axe non trouvé' });
     }
 
-    // Vérifier si des projets sont liés à cet axe
     const projects = await Project.findAll({
       where: { axe_id: axe.id },
     });
@@ -125,7 +171,7 @@ const deleteAxe = async (req, res) => {
   }
 };
 
-// Récupérer les statistiques d'un axe
+// Récupérer les statistiques d'un axe (INCLUANT BUDGET)
 const getStats = async (req, res) => {
   try {
     const axes = await Axe.findAll({
@@ -169,6 +215,18 @@ const getStats = async (req, res) => {
         totalTasks,
         completedTasks,
         progress,
+        // 🔥 STATISTIQUES BUDGET
+        budget: {
+          total: axe.budget_total,
+          used: axe.budget_used,
+          remaining: axe.getBudgetRemaining(),
+          usedPercentage: axe.getBudgetUsedPercentage(),
+          remainingPercentage: axe.getBudgetRemainingPercentage(),
+          currency: axe.budget_currency,
+          hasBudget: axe.hasBudget(),
+          isWarning: axe.isBudgetWarning(),
+          isExhausted: axe.isBudgetExhausted(),
+        },
       };
     }));
 

@@ -51,6 +51,15 @@ const Project = sequelize.define('Project', {
     type: DataTypes.INTEGER,
     allowNull: false,
   },
+  // ============================================
+  // 🔥 NOUVEAU : BUDGET DU PROJET
+  // ============================================
+  budget_cost: {
+    type: DataTypes.DECIMAL(15, 2),
+    allowNull: true,
+    defaultValue: 0,
+    comment: 'Coût budgétaire du projet',
+  },
 }, {
   tableName: 'projects',
   timestamps: true,

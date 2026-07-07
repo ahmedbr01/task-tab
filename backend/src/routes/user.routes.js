@@ -77,6 +77,7 @@ router.post('/', auth, authorize('admin'), async (req, res) => {
       });
     }
     
+    // Vérifier si l'utilisateur existe déjà
     const existingUser = await User.findOne({
       where: {
         [Op.or]: [{ username }, { email }],
@@ -144,7 +145,7 @@ router.put('/:id', auth, authorize('admin'), async (req, res) => {
 });
 
 // ============================================
-// 🔥 SUPPRIMER UN UTILISATEUR (ADMIN SEULEMENT)
+// SUPPRIMER UN UTILISATEUR (ADMIN SEULEMENT)
 // ============================================
 router.delete('/:id', auth, authorize('admin'), async (req, res) => {
   try {

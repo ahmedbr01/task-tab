@@ -6,7 +6,7 @@ import {
   LogOut, User, Settings, Bell, LayoutGrid, Search, 
   ChevronDown, Home, FolderKanban, Calendar, MessageSquare, 
   FileText, GanttChart, Database, BarChart3, Users, 
-  Tag, ScrollText, Menu, X, Award 
+  Tag, ScrollText, Menu, X, Award, FileBarChart
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 
@@ -106,8 +106,12 @@ const Layout = () => {
     { path: '/documents', icon: <FileText className="w-4 h-4" />, label: 'الوثائق' },
     { path: '/correspondence', icon: <FileText className="w-4 h-4" />, label: 'المراسلات' },
     { path: '/axes', icon: <Database className="w-4 h-4" />, label: 'المحاور' },
+    // ============================================
+    // 🔥 REPORTING - AJOUTÉ DANS LE MENU
+    // ============================================
+    { path: '/reporting', icon: <BarChart3 className="w-4 h-4" />, label: 'التقارير' },
     { path: '/search', icon: <Search className="w-4 h-4" />, label: 'بحث متقدم' },
-    { path: '/export', icon: <BarChart3 className="w-4 h-4" />, label: 'تصدير' },
+    { path: '/export', icon: <FileBarChart className="w-4 h-4" />, label: 'تصدير' },
   ];
 
   const adminItems = [
@@ -125,11 +129,10 @@ const Layout = () => {
   return (
     <div className="min-h-screen bg-slate-50">
       {/* ============================================ */}
-      {/* HEADER - Moderne et compact */}
+      {/* HEADER */}
       {/* ============================================ */}
       <header className="bg-white border-b border-slate-200/80 px-4 py-2 flex items-center justify-between sticky top-0 z-50 backdrop-blur-sm bg-white/95">
         <div className="flex items-center gap-3">
-          {/* Mobile Menu Button */}
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             className="lg:hidden p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
@@ -137,7 +140,6 @@ const Layout = () => {
             {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
 
-          {/* Logo */}
           <Link to="/dashboard" className="flex items-center gap-2 group">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#1a5b3e] to-[#2d8b5e] flex items-center justify-center text-white font-bold text-sm shadow-sm group-hover:shadow-md transition-shadow">
               T
@@ -150,7 +152,6 @@ const Layout = () => {
         </div>
 
         <div className="flex items-center gap-1.5">
-          {/* Notifications */}
           <Link
             to="/notifications"
             className="relative p-2 rounded-lg hover:bg-slate-100 transition-colors"
@@ -163,7 +164,6 @@ const Layout = () => {
             )}
           </Link>
 
-          {/* Profil */}
           <div className="relative">
             <button
               onClick={() => setShowDropdown(!showDropdown)}
@@ -182,7 +182,6 @@ const Layout = () => {
               <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform duration-200 ${showDropdown ? 'rotate-180' : ''}`} />
             </button>
 
-            {/* Dropdown */}
             {showDropdown && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setShowDropdown(false)}></div>
@@ -253,7 +252,6 @@ const Layout = () => {
       {/* CONTENU PRINCIPAL AVEC SIDEBAR */}
       {/* ============================================ */}
       <div className="flex">
-        {/* Sidebar - Desktop */}
         <aside className={`
           fixed lg:static inset-y-0 left-0 z-40
           w-56 bg-white border-l border-slate-200/80
@@ -331,7 +329,6 @@ const Layout = () => {
           </nav>
         </aside>
 
-        {/* Main content */}
         <main className="flex-1 p-4 md:p-5 max-w-6xl mx-auto w-full">
           <Outlet />
         </main>

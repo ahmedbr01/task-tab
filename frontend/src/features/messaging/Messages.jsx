@@ -7,6 +7,66 @@ import { PageShell } from '../../components/Layout';
 import { toast } from 'react-toastify';
 import { Send, Search, User } from 'lucide-react';
 
+// ============================================
+// 🔥 FONCTION POUR OBTENIR L'URL DE L'AVATAR
+// ============================================
+const getAvatarUrl = (avatarPath) => {
+  if (!avatarPath) return null;
+  // Si c'est déjà une URL complète
+  if (avatarPath.startsWith('http')) return avatarPath;
+  // Si le chemin commence par /uploads
+  if (avatarPath.startsWith('/uploads')) {
+    return `http://localhost:5000${avatarPath}`;
+  }
+  // Autre cas
+  return `http://localhost:5000/uploads/${avatarPath}`;
+};
+
+// ============================================
+// COMPOSANT AVATAR
+// ============================================
+const UserAvatar = ({ user, size = 'w-10 h-10', textSize = 'text-sm' }) => {
+  if (!user) return null;
+
+  const getInitials = () => {
+    if (user.full_name) {
+      const names = user.full_name.trim().split(' ');
+      if (names.length >= 2) {
+        return (names[0][0] + names[1][0]).toUpperCase();
+      }
+      return user.full_name[0].toUpperCase();
+    }
+    return user.username?.[0]?.toUpperCase() || 'U';
+  };
+
+  const avatarUrl = getAvatarUrl(user.avatar);
+
+  if (avatarUrl) {
+    return (
+      <img
+        src={avatarUrl}
+        alt={user.full_name || user.username}
+        className={`${size} rounded-full object-cover border-2 border-white shadow-sm flex-shrink-0`}
+        onError={(e) => {
+          // En cas d'erreur de chargement, afficher les initiales
+          e.target.style.display = 'none';
+          const parent = e.target.parentElement;
+          const initials = document.createElement('div');
+          initials.className = `${size} rounded-full bg-gradient-to-br from-[#1a5b3e] to-[#2d8b5e] flex items-center justify-center text-white font-bold ${textSize} shadow-sm flex-shrink-0`;
+          initials.textContent = getInitials();
+          parent.appendChild(initials);
+        }}
+      />
+    );
+  }
+
+  return (
+    <div className={`${size} rounded-full bg-gradient-to-br from-[#1a5b3e] to-[#2d8b5e] flex items-center justify-center text-white font-bold ${textSize} shadow-sm flex-shrink-0`}>
+      {getInitials()}
+    </div>
+  );
+};
+
 const Messages = () => {
   const { user } = useAuth();
   const { socket } = useSocket();
@@ -56,10 +116,9 @@ const Messages = () => {
   const loadUsers = async () => {
     try {
       console.log('🔄 Chargement des utilisateurs...');
-      const res = await userApi.getActive();
+      const res = await userApi.getActiveUsers();
       console.log('📋 Utilisateurs reçus:', res.data);
       
-      // Filtrer pour exclure l'utilisateur connecté
       const activeUsers = (res.data.users || []).filter(u => u.id !== user.id);
       setUsers(activeUsers);
       
@@ -67,16 +126,12 @@ const Messages = () => {
     } catch (error) {
       console.error('❌ Erreur chargement utilisateurs:', error);
       
-      // 🔥 FALLBACK : Utiliser l'API /users si /active échoue
-      try {
-        console.log('🔄 Tentative avec /users...');
-        const fallbackRes = await userApi.getAll();
-        const allUsers = (fallbackRes.data.users || []).filter(u => u.id !== user.id);
-        setUsers(allUsers);
-        console.log(`👥 ${allUsers.length} utilisateurs chargés (fallback)`);
-      } catch (fallbackError) {
-        console.error('❌ Erreur fallback:', fallbackError);
+      if (error.response?.status === 403) {
+        toast.error('❌ Vous n\'avez pas les droits pour voir tous les utilisateurs');
+        setUsers([]);
+      } else {
         toast.error('❌ Impossible de charger la liste des utilisateurs');
+        setUsers([]);
       }
     }
   };
@@ -102,14 +157,17 @@ const Messages = () => {
       const res = await messageApi.getConversation(userId);
       setMessages(res.data.messages || []);
       
-      // Trouver l'utilisateur dans la liste
       const selected = users.find(u => u.id === userId);
       if (selected) {
         setSelectedUser(selected);
       } else {
-        // Si l'utilisateur n'est pas dans la liste, le récupérer
-        const userRes = await userApi.getById(userId);
-        setSelectedUser(userRes.data.user);
+        try {
+          const userRes = await userApi.getById(userId);
+          setSelectedUser(userRes.data.user);
+        } catch (error) {
+          console.error('❌ Erreur récupération utilisateur:', error);
+          toast.error('❌ Impossible de charger les informations de l\'utilisateur');
+        }
       }
     } catch (error) {
       console.error('❌ Erreur chargement messages:', error);
@@ -147,11 +205,9 @@ const Messages = () => {
     } catch (error) {
       console.error('❌ Erreur envoi:', error);
       
-      // Si la conversation n'existe pas, la créer
       if (error.response?.status === 404 || error.response?.data?.message?.includes('conversation')) {
         try {
           await messageApi.createConversation(selectedUser.id);
-          // Réessayer d'envoyer
           const retryRes = await messageApi.sendMessage({
             receiver_id: selectedUser.id,
             content: newMessage.trim()
@@ -221,9 +277,9 @@ const Messages = () => {
                     selectedUser?.id === u.id ? 'bg-[#1a5b3e]/5 border-r-2 border-[#1a5b3e]' : ''
                   }`}
                 >
-                  <div className="w-10 h-10 rounded-full bg-[#1a5b3e] flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-                    {(u.full_name || u.username)?.[0]?.toUpperCase() || 'U'}
-                  </div>
+                  {/* 🔥 Utilisation du composant UserAvatar */}
+                  <UserAvatar user={u} size="w-10 h-10" textSize="text-sm" />
+                  
                   <div className="flex-1 min-w-0 text-right">
                     <p className="text-sm font-semibold text-slate-800 truncate">
                       {u.full_name || u.username}
@@ -241,11 +297,11 @@ const Messages = () => {
         {/* ============ ZONE DE CONVERSATION ============ */}
         {selectedUser ? (
           <div className="flex-1 flex flex-col">
-            {/* En-tête */}
+            {/* En-tête avec avatar */}
             <div className="p-4 border-b border-slate-200 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-[#1a5b3e] flex items-center justify-center text-white font-bold text-sm">
-                {(selectedUser.full_name || selectedUser.username)?.[0]?.toUpperCase() || 'U'}
-              </div>
+              {/* 🔥 Avatar dans l'en-tête */}
+              <UserAvatar user={selectedUser} size="w-10 h-10" textSize="text-sm" />
+              
               <div className="flex-1">
                 <p className="font-semibold text-slate-800">{selectedUser.full_name || selectedUser.username}</p>
                 <p className="text-xs text-slate-400">@{selectedUser.username}</p>
@@ -264,28 +320,38 @@ const Messages = () => {
                   <p className="text-sm mt-1">أرسل رسالة لبدء المحادثة</p>
                 </div>
               ) : (
-                messages.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={`flex ${msg.sender_id === user.id ? 'justify-end' : 'justify-start'}`}
-                  >
+                messages.map((msg) => {
+                  const isOwnMessage = msg.sender_id === user.id;
+                  const messageUser = isOwnMessage ? user : selectedUser;
+                  
+                  return (
                     <div
-                      className={`max-w-[70%] rounded-2xl px-4 py-2.5 ${
-                        msg.sender_id === user.id
-                          ? 'bg-[#1a5b3e] text-white'
-                          : 'bg-slate-100 text-slate-800'
-                      }`}
+                      key={msg.id}
+                      className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'} items-end gap-2`}
                     >
-                      <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-                      <p className={`text-[10px] mt-1 ${msg.sender_id === user.id ? 'text-white/60' : 'text-slate-400'}`}>
-                        {new Date(msg.created_at).toLocaleTimeString('fr-FR', {
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
-                      </p>
+                      {/* Avatar de l'expéditeur (pour les messages reçus) */}
+                      {!isOwnMessage && (
+                        <UserAvatar user={messageUser} size="w-8 h-8" textSize="text-xs" />
+                      )}
+                      
+                      <div
+                        className={`max-w-[70%] rounded-2xl px-4 py-2.5 ${
+                          isOwnMessage
+                            ? 'bg-[#1a5b3e] text-white'
+                            : 'bg-slate-100 text-slate-800'
+                        }`}
+                      >
+                        <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                        <p className={`text-[10px] mt-1 ${isOwnMessage ? 'text-white/60' : 'text-slate-400'}`}>
+                          {new Date(msg.created_at).toLocaleTimeString('fr-FR', {
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
               <div ref={messagesEndRef} />
             </div>

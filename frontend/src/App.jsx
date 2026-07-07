@@ -14,7 +14,7 @@ import Login from './features/auth/Login';
 // ============================================
 // LAYOUT
 // ============================================
-import Layout from './components/Layout'; // <-- Import du Layout corrigé
+import Layout from './components/Layout';
 
 // ============================================
 // PAGES PRINCIPALES
@@ -34,14 +34,17 @@ import Profile from './features/profile/Profile';
 import Notifications from './features/notifications/Notifications';
 
 // ============================================
+// 🔥 PAGE REPORTING (AJOUTÉE)
+// ============================================
+import Reporting from './features/reporting/Reporting';
+
+// ============================================
 // PAGES ADMIN
 // ============================================
 import AdminDashboard from './features/admin/AdminDashboard';
 import AdminUsers from './features/admin/AdminUsers';
 import AdminCategories from './features/admin/AdminCategories';
 import Logs from './features/logs/Logs';
-// Note: Settings n'existe pas dans ta structure
-// import Settings from './features/admin/Settings';
 
 // ============================================
 // PROTECTION DES ROUTES
@@ -115,6 +118,17 @@ function App() {
                   <Route path="documents" element={<Documents />} />
                   <Route path="correspondence" element={<Correspondence />} />
                   <Route path="axes" element={<Axes />} />
+                  
+                  {/* 🔥 ROUTE REPORTING AJOUTÉE */}
+                  <Route 
+                    path="reporting" 
+                    element={
+                      <ProtectedRoute requiredRole="manager">
+                        <Reporting />
+                      </ProtectedRoute>
+                    } 
+                  />
+                  
                   <Route path="search" element={<Search />} />
                   <Route path="export" element={<Export />} />
                   <Route path="profile" element={<Profile />} />
@@ -153,16 +167,6 @@ function App() {
                       </ProtectedRoute>
                     }
                   />
-                  {/* La route Settings est commentée car le fichier n'existe pas
-                  <Route
-                    path="admin/settings"
-                    element={
-                      <ProtectedRoute requiredRole="admin">
-                        <Settings />
-                      </ProtectedRoute>
-                    }
-                  />
-                  */}
                 </Route>
 
                 {/* ROUTE 404 */}

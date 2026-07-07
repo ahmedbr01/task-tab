@@ -27,6 +27,30 @@ const Axe = sequelize.define('Axe', {
     type: DataTypes.INTEGER,
     defaultValue: 0,
   },
+  // ============================================
+  // 🔥 NOUVEAU : CHAMPS BUDGET
+  // ============================================
+  budget_total: {
+    type: DataTypes.DECIMAL(15, 2),
+    allowNull: true,
+    defaultValue: 0,
+    comment: 'Budget total alloué à l\'axe',
+  },
+  budget_used: {
+    type: DataTypes.DECIMAL(15, 2),
+    allowNull: true,
+    defaultValue: 0,
+    comment: 'Budget déjà utilisé par les projets',
+  },
+  budget_currency: {
+    type: DataTypes.ENUM('TND', 'EUR', 'USD'),
+    defaultValue: 'TND',
+  },
+  budget_warning_threshold: {
+    type: DataTypes.DECIMAL(5, 2),
+    defaultValue: 10,
+    comment: 'Seuil d\'alerte en % (ex: 10 = 10%)',
+  },
   created_by: {
     type: DataTypes.INTEGER,
     allowNull: false,
@@ -46,14 +70,12 @@ const Axe = sequelize.define('Axe', {
 // ASSOCIATIONS
 // ============================================
 Axe.associate = function(models) {
-  // Un axe peut avoir plusieurs projets
   Axe.hasMany(models.Project, {
     as: 'projects',
     foreignKey: 'axe_id',
     onDelete: 'SET NULL',
   });
 
-  // Un axe est créé par un utilisateur
   Axe.belongsTo(models.User, {
     as: 'creator',
     foreignKey: 'created_by',
@@ -61,43 +83,33 @@ Axe.associate = function(models) {
 };
 
 // ============================================
-// MÉTHODES D'INSTANCE
+// MÉTHODES D'INSTANCE - BUDGET
 // ============================================
-Axe.prototype.getProjectsCount = async function() {
-  const Project = require('./Project');
-  return await Project.count({
-    where: { axe_id: this.id }
-  });
+Axe.prototype.getBudgetRemaining = function() {
+  return parseFloat(this.budget_total || 0) - parseFloat(this.budget_used || 0);
 };
 
-Axe.prototype.getProgress = async function() {
-  const Project = require('./Project');
-  const Action = require('./Action');
-  const Task = require('./Task');
+Axe.prototype.getBudgetUsedPercentage = function() {
+  if (parseFloat(this.budget_total || 0) === 0) return 0;
+  return (parseFloat(this.budget_used || 0) / parseFloat(this.budget_total || 0)) * 100;
+};
 
-  const projects = await Project.findAll({
-    where: { axe_id: this.id },
-  });
+Axe.prototype.getBudgetRemainingPercentage = function() {
+  if (parseFloat(this.budget_total || 0) === 0) return 0;
+  return (this.getBudgetRemaining() / parseFloat(this.budget_total || 0)) * 100;
+};
 
-  let totalTasks = 0;
-  let completedTasks = 0;
+Axe.prototype.isBudgetWarning = function() {
+  return this.getBudgetRemainingPercentage() <= parseFloat(this.budget_warning_threshold || 10) &&
+         this.getBudgetRemaining() > 0;
+};
 
-  for (const project of projects) {
-    const actions = await Action.findAll({
-      where: { project_id: project.id },
-    });
-    for (const action of actions) {
-      const tasks = await Task.findAll({
-        where: { action_id: action.id },
-      });
-      tasks.forEach(t => {
-        totalTasks++;
-        if (t.status === 'done') completedTasks++;
-      });
-    }
-  }
+Axe.prototype.isBudgetExhausted = function() {
+  return this.getBudgetRemaining() <= 0;
+};
 
-  return totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+Axe.prototype.hasBudget = function() {
+  return parseFloat(this.budget_total || 0) > 0;
 };
 
 // ============================================
@@ -110,49 +122,15 @@ Axe.getActiveAxes = async function() {
   });
 };
 
-Axe.getAxesWithStats = async function() {
+Axe.getAxesWithBudgetAlerts = async function() {
   const axes = await this.findAll({
     where: { is_active: true },
     include: [
-      {
-        model: Project,
-        as: 'projects',
-      },
+      { model: sequelize.models.Project, as: 'projects' },
     ],
-    order: [['order', 'ASC']],
   });
-
-  const stats = await Promise.all(axes.map(async (axe) => {
-    const progress = await axe.getProgress();
-    return {
-      id: axe.id,
-      name: axe.name_ar,
-      code: axe.code,
-      color: axe.color,
-      order: axe.order,
-      projectsCount: axe.projects?.length || 0,
-      progress: progress,
-    };
-  }));
-
-  return stats;
+  
+  return axes.filter(axe => axe.isBudgetWarning() || axe.isBudgetExhausted());
 };
 
-// ============================================
-// HOOKS
-// ============================================
-Axe.addHook('beforeDestroy', async (axe, options) => {
-  // Vérifier si des projets sont liés avant de supprimer
-  const Project = require('./Project');
-  const projectsCount = await Project.count({
-    where: { axe_id: axe.id }
-  });
-  if (projectsCount > 0) {
-    throw new Error(`Impossible de supprimer cet axe car il contient ${projectsCount} projet(s)`);
-  }
-});
-
-// ============================================
-// EXPORTER
-// ============================================
 module.exports = Axe;

@@ -1,5 +1,6 @@
 const Project = require('../models/Project');
 const Action = require('../models/Action');
+const Axe = require('../models/Axe');
 const { Op } = require('sequelize');
 const { logAction } = require('../middleware/logger.middleware');
 
@@ -16,7 +17,6 @@ const getAll = async (req, res) => {
     const sortBy = req.query.sortBy || 'created_at';
     const sortOrder = req.query.sortOrder || 'DESC';
 
-    // Construire la condition de recherche
     const where = {};
     if (search) {
       where[Op.or] = [
@@ -28,10 +28,8 @@ const getAll = async (req, res) => {
       where.status = status;
     }
 
-    // Compter le nombre total
     const total = await Project.count({ where });
 
-    // Récupérer les projets
     const projects = await Project.findAll({
       where,
       order: [[sortBy, sortOrder]],
@@ -74,14 +72,174 @@ const getById = async (req, res) => {
 };
 
 // ============================================
-// CRÉER UN PROJET (AVEC LOGS)
+// FONCTION : METTRE À JOUR LE BUDGET DE L'AXE
+// ============================================
+const updateAxeBudget = async (axeId) => {
+  try {
+    console.log(`💰 Mise à jour du budget pour l'axe ID: ${axeId}`);
+    
+    const axe = await Axe.findByPk(axeId);
+    if (!axe) {
+      console.log(`❌ Axe ${axeId} non trouvé`);
+      return;
+    }
+
+    // Récupérer tous les projets de l'axe
+    const projects = await Project.findAll({
+      where: { axe_id: axeId },
+    });
+
+    // Calculer le total utilisé
+    let totalUsed = 0;
+    for (const project of projects) {
+      totalUsed += parseFloat(project.budget_cost || 0);
+    }
+
+    // Mettre à jour l'axe
+    axe.budget_used = totalUsed;
+    await axe.save();
+
+    console.log(`💰 Axe ${axe.name_ar}: Budget total=${axe.budget_total}, Utilisé=${axe.budget_used}, Restant=${axe.getBudgetRemaining()}`);
+
+    // Vérifier les alertes
+    await checkBudgetAlert(axe);
+
+    return axe;
+  } catch (error) {
+    console.error('❌ Erreur updateAxeBudget:', error);
+  }
+};
+
+// ============================================
+// FONCTION : VÉRIFIER LES ALERTES BUDGET
+// ============================================
+const checkBudgetAlert = async (axe) => {
+  try {
+    if (!axe.hasBudget()) {
+      return;
+    }
+
+    const remainingPercentage = axe.getBudgetRemainingPercentage();
+    const remaining = axe.getBudgetRemaining();
+
+    console.log(`📊 Axe ${axe.name_ar}: ${remainingPercentage.toFixed(1)}% restant (seuil: ${axe.budget_warning_threshold}%)`);
+
+    if (remainingPercentage > axe.budget_warning_threshold) {
+      return;
+    }
+
+    const notificationController = require('./notification.controller');
+    const User = require('../models/User');
+
+    const users = await User.findAll({
+      where: {
+        role: { [Op.in]: ['admin', 'manager'] },
+        is_active: true,
+      },
+    });
+
+    if (users.length === 0) return;
+
+    let title = '';
+    let message = '';
+
+    if (axe.isBudgetExhausted()) {
+      title = `🚨 BUDGET ÉPUISÉ - ${axe.name_ar}`;
+      message = `Le budget de l'axe "${axe.name_ar}" est complètement épuisé.\n\n📊 Solde restant: 0 ${axe.budget_currency}\n💰 Total utilisé: ${axe.budget_used} ${axe.budget_currency}\n📈 Total alloué: ${axe.budget_total} ${axe.budget_currency}`;
+    } else {
+      title = `⚠️ BUDGET CRITIQUE - ${axe.name_ar}`;
+      message = `Le budget de l'axe "${axe.name_ar}" est à ${remainingPercentage.toFixed(1)}%.\n\n📊 Solde restant: ${remaining} ${axe.budget_currency}\n💰 Total utilisé: ${axe.budget_used} ${axe.budget_currency}\n📈 Total alloué: ${axe.budget_total} ${axe.budget_currency}`;
+    }
+
+    for (const user of users) {
+      await notificationController.createNotification(
+        user.id,
+        'system',
+        title,
+        message,
+        '/axes',
+        {
+          axeId: axe.id,
+          axeName: axe.name_ar,
+          remaining: remaining,
+          used: axe.budget_used,
+          total: axe.budget_total,
+          percentage: remainingPercentage,
+        }
+      );
+    }
+
+    console.log(`📧 Alerte budget envoyée à ${users.length} utilisateurs`);
+
+  } catch (error) {
+    console.error('❌ Erreur checkBudgetAlert:', error);
+  }
+};
+
+// ============================================
+// FONCTION : VÉRIFIER LE BUDGET DISPONIBLE
+// ============================================
+const checkBudgetAvailability = async (axeId, requestedAmount, excludeProjectId = null) => {
+  console.log(`🔍 Vérification du budget pour l'axe ${axeId}, montant demandé: ${requestedAmount}`);
+  
+  const axe = await Axe.findByPk(axeId);
+  
+  if (!axe) {
+    return {
+      success: false,
+      message: 'Axe non trouvé',
+    };
+  }
+
+  if (!axe.hasBudget()) {
+    return {
+      success: false,
+      message: `Cet axe n'a pas de budget défini. Veuillez contacter l'administrateur.`,
+    };
+  }
+
+  // Calculer le budget utilisé (en excluant le projet en cours de modification si nécessaire)
+  let usedAmount = parseFloat(axe.budget_used || 0);
+  
+  if (excludeProjectId) {
+    const project = await Project.findByPk(excludeProjectId);
+    if (project) {
+      // Soustraire l'ancien budget du projet pour ne pas le compter deux fois
+      usedAmount -= parseFloat(project.budget_cost || 0);
+    }
+  }
+
+  const remaining = parseFloat(axe.budget_total || 0) - usedAmount;
+  
+  console.log(`💰 Budget disponible: ${remaining} ${axe.budget_currency}`);
+  console.log(`💰 Montant demandé: ${requestedAmount} ${axe.budget_currency}`);
+
+  if (remaining < parseFloat(requestedAmount)) {
+    return {
+      success: false,
+      message: `Budget insuffisant. Le budget restant de cet axe (${remaining} ${axe.budget_currency}) ne permet pas de créer ou de modifier ce projet.`,
+      available: remaining,
+      requested: requestedAmount,
+      currency: axe.budget_currency,
+    };
+  }
+
+  return {
+    success: true,
+    remaining: remaining,
+    currency: axe.budget_currency,
+  };
+};
+
+// ============================================
+// CRÉER UN PROJET (AVEC LOGS + BUDGET)
 // ============================================
 const create = async (req, res) => {
   try {
     console.log('📝 Création d\'un projet par:', req.user.id);
     console.log('📝 Données reçues:', req.body);
 
-    const { name_ar, description, axe_id, start_date, end_date } = req.body;
+    const { name_ar, description, axe_id, start_date, end_date, budget_cost } = req.body;
 
     if (!name_ar || !start_date || !end_date) {
       return res.status(400).json({
@@ -90,7 +248,26 @@ const create = async (req, res) => {
       });
     }
 
-    // Créer le projet
+    // ============================================
+    // 🔥 VÉRIFICATION DU BUDGET AVANT CRÉATION
+    // ============================================
+    if (axe_id && budget_cost && parseFloat(budget_cost) > 0) {
+      const check = await checkBudgetAvailability(axe_id, budget_cost);
+      
+      if (!check.success) {
+        return res.status(400).json({
+          success: false,
+          message: check.message,
+          available: check.available,
+          requested: check.requested,
+          currency: check.currency,
+        });
+      }
+    }
+
+    // ============================================
+    // CRÉER LE PROJET
+    // ============================================
     const project = await Project.create({
       name_ar,
       description: description || '',
@@ -99,12 +276,12 @@ const create = async (req, res) => {
       end_date,
       status: 'pending',
       progress: 0,
+      budget_cost: parseFloat(budget_cost) || 0,
       created_by: req.user.id,
     });
 
-    console.log('✅ Projet créé:', project.id);
+    console.log(`✅ Projet créé: ID=${project.id}, Budget=${project.budget_cost}`);
 
-    // LOG - Création
     await logAction(
       'CREATE',
       'projects',
@@ -114,7 +291,16 @@ const create = async (req, res) => {
       req
     );
 
-    // Créer automatiquement une action par défaut
+    // ============================================
+    // METTRE À JOUR LE BUDGET DE L'AXE
+    // ============================================
+    if (axe_id) {
+      await updateAxeBudget(axe_id);
+    }
+
+    // ============================================
+    // CRÉER UNE ACTION PAR DÉFAUT
+    // ============================================
     await Action.create({
       project_id: project.id,
       name_ar: 'Action par défaut',
@@ -124,9 +310,6 @@ const create = async (req, res) => {
       created_by: req.user.id,
     });
 
-    console.log('✅ Action par défaut créée pour le projet:', project.id);
-
-    // LOG - Action créée automatiquement
     await logAction(
       'CREATE',
       'actions',
@@ -136,13 +319,14 @@ const create = async (req, res) => {
       req
     );
 
-    // Notification
+    // ============================================
+    // ENVOYER LES NOTIFICATIONS
+    // ============================================
     try {
       const notificationController = require('./notification.controller');
       const User = require('../models/User');
       const creator = await User.findByPk(req.user.id);
       
-      // Notifier les managers et admins
       const users = await User.findAll({
         where: {
           role: { [Op.in]: ['admin', 'manager'] },
@@ -164,6 +348,8 @@ const create = async (req, res) => {
       console.warn('⚠️ Erreur notification:', notifError.message);
     }
 
+    await project.reload();
+
     res.status(201).json({
       success: true,
       project,
@@ -180,22 +366,56 @@ const create = async (req, res) => {
 };
 
 // ============================================
-// METTRE À JOUR UN PROJET (AVEC LOGS)
+// METTRE À JOUR UN PROJET (AVEC LOGS + BUDGET)
 // ============================================
 const update = async (req, res) => {
   try {
+    console.log(`📝 Mise à jour du projet ${req.params.id}`);
+    
     const project = await Project.findByPk(req.params.id);
     if (!project) {
       return res.status(404).json({ success: false, message: 'Projet non trouvé' });
     }
 
-    // Sauvegarder les anciennes données pour le log
-    const oldData = project.toJSON();
+    const { axe_id, budget_cost, name_ar, description, start_date, end_date, status, progress } = req.body;
 
+    // ============================================
+    // 🔥 VÉRIFICATION DU BUDGET AVANT MODIFICATION
+    // ============================================
+    if (axe_id && budget_cost !== undefined && parseFloat(budget_cost) > 0) {
+      // Vérifier le budget en excluant le projet actuel
+      const check = await checkBudgetAvailability(axe_id, budget_cost, project.id);
+      
+      if (!check.success) {
+        return res.status(400).json({
+          success: false,
+          message: check.message,
+          available: check.available,
+          requested: check.requested,
+          currency: check.currency,
+        });
+      }
+    }
+
+    const oldData = project.toJSON();
+    const oldAxeId = project.axe_id;
+
+    // Mettre à jour le projet
     await project.update(req.body);
     await project.reload();
 
-    // LOG - Mise à jour
+    console.log(`✅ Projet ${project.id} mis à jour`);
+
+    // ============================================
+    // METTRE À JOUR LE BUDGET DES AXES
+    // ============================================
+    if (oldAxeId && oldAxeId !== project.axe_id) {
+      await updateAxeBudget(oldAxeId);
+    }
+    if (project.axe_id) {
+      await updateAxeBudget(project.axe_id);
+    }
+
     await logAction(
       'UPDATE',
       'projects',
@@ -205,7 +425,11 @@ const update = async (req, res) => {
       req
     );
 
-    res.json({ success: true, project });
+    res.json({ 
+      success: true, 
+      project,
+      message: 'Projet mis à jour avec succès'
+    });
   } catch (error) {
     console.error('❌ Erreur update project:', error);
     res.status(500).json({ success: false, message: error.message });
@@ -213,11 +437,11 @@ const update = async (req, res) => {
 };
 
 // ============================================
-// SUPPRIMER UN PROJET (AVEC LOGS)
+// SUPPRIMER UN PROJET
 // ============================================
 const deleteProject = async (req, res) => {
   try {
-    console.log('🗑️ DELETE /api/projects/' + req.params.id);
+    console.log(`🗑️ DELETE /api/projects/${req.params.id}`);
 
     const project = await Project.findByPk(req.params.id);
     if (!project) {
@@ -227,7 +451,6 @@ const deleteProject = async (req, res) => {
       });
     }
 
-    // Vérifier si l'utilisateur est admin
     if (req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
@@ -235,15 +458,13 @@ const deleteProject = async (req, res) => {
       });
     }
 
-    // Sauvegarder les données pour le log
     const oldData = project.toJSON();
+    const axeId = project.axe_id;
 
-    // Supprimer d'abord les actions liées
     await Action.destroy({
       where: { project_id: project.id },
     });
 
-    // LOG - Suppression des actions
     await logAction(
       'DELETE',
       'actions',
@@ -253,10 +474,8 @@ const deleteProject = async (req, res) => {
       req
     );
 
-    // Puis supprimer le projet
     await project.destroy();
 
-    // LOG - Suppression du projet
     await logAction(
       'DELETE',
       'projects',
@@ -266,12 +485,14 @@ const deleteProject = async (req, res) => {
       req
     );
 
-    // Notification
+    if (axeId) {
+      await updateAxeBudget(axeId);
+    }
+
     try {
       const notificationController = require('./notification.controller');
       const User = require('../models/User');
       
-      // Notifier les managers et admins
       const users = await User.findAll({
         where: {
           role: { [Op.in]: ['admin', 'manager'] },
@@ -307,6 +528,34 @@ const deleteProject = async (req, res) => {
 };
 
 // ============================================
+// RÉCUPÉRER LE BUDGET DISPONIBLE D'UN AXE (API)
+// ============================================
+const getAvailableBudget = async (req, res) => {
+  try {
+    const { axeId } = req.params;
+    const { excludeProjectId } = req.query;
+
+    const check = await checkBudgetAvailability(axeId, 0, excludeProjectId || null);
+    
+    if (!check.success) {
+      return res.status(400).json({
+        success: false,
+        message: check.message,
+      });
+    }
+
+    res.json({
+      success: true,
+      available: check.remaining,
+      currency: check.currency,
+    });
+  } catch (error) {
+    console.error('❌ Erreur getAvailableBudget:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ============================================
 // RÉCUPÉRER LES STATISTIQUES DES PROJETS
 // ============================================
 const getStats = async (req, res) => {
@@ -317,7 +566,6 @@ const getStats = async (req, res) => {
     const pending = await Project.count({ where: { status: 'pending' } });
     const cancelled = await Project.count({ where: { status: 'cancelled' } });
 
-    // Progression moyenne
     const projects = await Project.findAll({
       attributes: ['progress'],
     });
@@ -341,9 +589,6 @@ const getStats = async (req, res) => {
   }
 };
 
-// ============================================
-// EXPORTER
-// ============================================
 module.exports = {
   getAll,
   getById,
@@ -351,4 +596,5 @@ module.exports = {
   update,
   delete: deleteProject,
   getStats,
+  getAvailableBudget, // 🔥 NOUVELLE ROUTE
 };

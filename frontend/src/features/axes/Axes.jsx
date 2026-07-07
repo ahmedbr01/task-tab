@@ -3,7 +3,7 @@ import { PageShell } from '../../components/Layout';
 import { useAuth } from '../../context/AuthContext';
 import { axeApi } from '../../api/axe.api';
 import { toast } from 'react-toastify';
-import { Plus, Pencil, Trash2, BookOpen, X } from 'lucide-react';
+import { Plus, Pencil, Trash2, BookOpen, X, Wallet } from 'lucide-react';
 
 const Axes = () => {
   const { user, isAdmin, isManager } = useAuth();
@@ -17,13 +17,18 @@ const Axes = () => {
     code: '',
     color: '#6366f1',
     order: 0,
+    budget_total: '',
+    budget_currency: 'TND',
+    budget_warning_threshold: 10,
   });
 
   const loadAxes = async () => {
     try {
+      setLoading(true);
       const response = await axeApi.getAll();
       setAxes(response.data.axes || []);
     } catch (error) {
+      console.error('❌ Erreur chargement axes:', error);
       toast.error('❌ Erreur lors du chargement des axes');
     } finally {
       setLoading(false);
@@ -37,19 +42,41 @@ const Axes = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      // Préparer les données
+      const data = {
+        name_ar: formData.name_ar,
+        description: formData.description || '',
+        code: formData.code || '',
+        color: formData.color || '#6366f1',
+        order: parseInt(formData.order) || 0,
+        budget_total: parseFloat(formData.budget_total) || 0,
+        budget_currency: formData.budget_currency || 'TND',
+        budget_warning_threshold: parseFloat(formData.budget_warning_threshold) || 10,
+      };
+
       if (editingAxe) {
-        await axeApi.update(editingAxe.id, formData);
-        toast.success('✅ Axe mis à jour');
+        await axeApi.update(editingAxe.id, data);
+        toast.success('✅ Axe mis à jour avec succès');
       } else {
-        await axeApi.create(formData);
-        toast.success('✅ Axe créé');
+        await axeApi.create(data);
+        toast.success('✅ Axe créé avec succès');
       }
       setShowModal(false);
       setEditingAxe(null);
-      setFormData({ name_ar: '', description: '', code: '', color: '#6366f1', order: 0 });
+      setFormData({ 
+        name_ar: '', 
+        description: '', 
+        code: '', 
+        color: '#6366f1', 
+        order: 0,
+        budget_total: '',
+        budget_currency: 'TND',
+        budget_warning_threshold: 10,
+      });
       loadAxes();
     } catch (error) {
-      toast.error('❌ Erreur lors de l\'enregistrement');
+      console.error('❌ Erreur enregistrement:', error);
+      toast.error(`❌ ${error.response?.data?.message || 'Erreur lors de l\'enregistrement'}`);
     }
   };
 
@@ -61,6 +88,9 @@ const Axes = () => {
       code: axe.code || '',
       color: axe.color || '#6366f1',
       order: axe.order || 0,
+      budget_total: axe.budget_total || '',
+      budget_currency: axe.budget_currency || 'TND',
+      budget_warning_threshold: axe.budget_warning_threshold || 10,
     });
     setShowModal(true);
   };
@@ -69,11 +99,52 @@ const Axes = () => {
     if (!window.confirm('Êtes-vous sûr de vouloir supprimer cet axe ?')) return;
     try {
       await axeApi.delete(id);
-      toast.success('✅ Axe supprimé');
+      toast.success('✅ Axe supprimé avec succès');
       loadAxes();
     } catch (error) {
+      console.error('❌ Erreur suppression:', error);
       toast.error('❌ Erreur lors de la suppression');
     }
+  };
+
+  // Fonction pour formater le budget
+  const formatBudget = (axe) => {
+    if (!axe.hasBudget || axe.budget_total <= 0) return null;
+    
+    const remaining = axe.budget_total - axe.budget_used;
+    const percentage = axe.budget_total > 0 ? (remaining / axe.budget_total) * 100 : 0;
+    
+    let statusColor = 'text-green-600';
+    let bgColor = 'bg-green-500';
+    
+    if (remaining <= 0) {
+      statusColor = 'text-gray-600';
+      bgColor = 'bg-gray-500';
+    } else if (percentage <= axe.budget_warning_threshold) {
+      statusColor = 'text-red-600';
+      bgColor = 'bg-red-500';
+    } else if (percentage <= axe.budget_warning_threshold * 2) {
+      statusColor = 'text-yellow-600';
+      bgColor = 'bg-yellow-500';
+    }
+
+    return (
+      <span className={`inline-flex items-center gap-2 text-xs ${statusColor}`}>
+        <Wallet className="w-3.5 h-3.5" />
+        <span className="font-medium">
+          {remaining.toFixed(0)} {axe.budget_currency}
+        </span>
+        <div className="w-12 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+          <div 
+            className={`h-full rounded-full transition-all duration-300 ${bgColor}`}
+            style={{ width: `${Math.min(100 - (remaining / axe.budget_total * 100), 100)}%` }}
+          />
+        </div>
+        <span className="text-slate-400 tabular-nums">
+          {((1 - remaining / axe.budget_total) * 100).toFixed(0)}%
+        </span>
+      </span>
+    );
   };
 
   if (loading) {
@@ -99,7 +170,16 @@ const Axes = () => {
             <button
               onClick={() => {
                 setEditingAxe(null);
-                setFormData({ name_ar: '', description: '', code: '', color: '#6366f1', order: 0 });
+                setFormData({ 
+                  name_ar: '', 
+                  description: '', 
+                  code: '', 
+                  color: '#6366f1', 
+                  order: 0,
+                  budget_total: '',
+                  budget_currency: 'TND',
+                  budget_warning_threshold: 10,
+                });
                 setShowModal(true);
               }}
               className="flex items-center gap-2 bg-[#1a5b3e] hover:bg-[#0f3d28] text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors shadow-sm"
@@ -137,11 +217,19 @@ const Axes = () => {
                     {axe.description && (
                       <p className="text-slate-500 text-sm mt-1 line-clamp-2">{axe.description}</p>
                     )}
-                    <div className="flex items-center gap-4 mt-2 text-xs text-slate-400">
+                    
+                    {/* 🔥 Indicateurs avec Budget */}
+                    <div className="flex items-center gap-4 mt-2 text-xs text-slate-400 flex-wrap">
                       <span className="flex items-center gap-1">
                         <BookOpen className="w-3.5 h-3.5" />
                         {axe.projects?.length || 0} projets
                       </span>
+                      
+                      {/* ============================================ */}
+                      {/* 🔥 INDICATEUR BUDGET (intégré dans l'axe) */}
+                      {/* ============================================ */}
+                      {formatBudget(axe)}
+                      
                       <span className="flex items-center gap-1">
                         <span 
                           className="w-3 h-3 rounded-full border border-slate-200" 
@@ -155,12 +243,14 @@ const Axes = () => {
                       <button 
                         onClick={() => handleEdit(axe)} 
                         className="p-1.5 rounded-lg text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                        title="Modifier"
                       >
                         <Pencil className="w-4 h-4" />
                       </button>
                       <button 
                         onClick={() => handleDelete(axe.id)} 
                         className="p-1.5 rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+                        title="Supprimer"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -173,12 +263,12 @@ const Axes = () => {
         </div>
       </PageShell>
 
-      {/* Modal d'ajout/édition */}
+      {/* Modal d'ajout/édition avec champ Budget */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
             {/* En-tête du modal */}
-            <div className="flex items-center justify-between p-4 border-b border-slate-100">
+            <div className="flex items-center justify-between p-4 border-b border-slate-100 sticky top-0 bg-white z-10 rounded-t-2xl">
               <h2 className="text-lg font-bold text-slate-800">
                 {editingAxe ? '✏️ تعديل المحور' : '➕ محور جديد'}
               </h2>
@@ -206,6 +296,7 @@ const Axes = () => {
                     className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a5b3e]/30 focus:border-[#1a5b3e] transition-all"
                     required
                     dir="rtl"
+                    placeholder="أدخل اسم المحور"
                   />
                 </div>
 
@@ -219,21 +310,36 @@ const Axes = () => {
                     className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a5b3e]/30 focus:border-[#1a5b3e] transition-all resize-none"
                     rows="3"
                     dir="rtl"
+                    placeholder="وصف المحور"
                   />
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1 text-right">
-                    الرمز
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.code}
-                    onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a5b3e]/30 focus:border-[#1a5b3e] transition-all"
-                    dir="rtl"
-                    placeholder="ex: AX-01"
-                  />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1 text-right">
+                      الرمز
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.code}
+                      onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a5b3e]/30 focus:border-[#1a5b3e] transition-all"
+                      dir="rtl"
+                      placeholder="AX-01"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1 text-right">
+                      ترتيب العرض
+                    </label>
+                    <input
+                      type="number"
+                      value={formData.order}
+                      onChange={(e) => setFormData({ ...formData, order: parseInt(e.target.value) || 0 })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a5b3e]/30 focus:border-[#1a5b3e] transition-all"
+                      min="0"
+                    />
+                  </div>
                 </div>
 
                 <div>
@@ -257,17 +363,64 @@ const Axes = () => {
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1 text-right">
-                    ترتيب العرض
-                  </label>
-                  <input
-                    type="number"
-                    value={formData.order}
-                    onChange={(e) => setFormData({ ...formData, order: parseInt(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a5b3e]/30 focus:border-[#1a5b3e] transition-all"
-                    min="0"
-                  />
+                {/* ============================================ */}
+                {/* 🔥 SECTION BUDGET */}
+                {/* ============================================ */}
+                <div className="border-t border-slate-200 pt-4 mt-2">
+                  <h4 className="text-sm font-semibold text-slate-700 mb-3 text-right">
+                    💰 الميزانية
+                  </h4>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1 text-right">
+                        الميزانية الإجمالية
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={formData.budget_total}
+                        onChange={(e) => setFormData({ ...formData, budget_total: e.target.value })}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a5b3e]/30 focus:border-[#1a5b3e] transition-all"
+                        placeholder="0.00"
+                        dir="ltr"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1 text-right">
+                        العملة
+                      </label>
+                      <select
+                        value={formData.budget_currency}
+                        onChange={(e) => setFormData({ ...formData, budget_currency: e.target.value })}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a5b3e]/30 focus:border-[#1a5b3e] transition-all"
+                      >
+                        <option value="TND">TND</option>
+                        <option value="EUR">EUR</option>
+                        <option value="USD">USD</option>
+                      </select>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-3">
+                    <label className="block text-sm font-medium text-slate-700 mb-1 text-right">
+                      seuil d'alerte (%)
+                    </label>
+                    <input
+                      type="number"
+                      step="1"
+                      min="0"
+                      max="100"
+                      value={formData.budget_warning_threshold}
+                      onChange={(e) => setFormData({ ...formData, budget_warning_threshold: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a5b3e]/30 focus:border-[#1a5b3e] transition-all"
+                      dir="ltr"
+                    />
+                    <p className="text-xs text-slate-400 mt-1 text-right">
+                      Alerte quand le budget restant est inférieur à ce pourcentage
+                    </p>
+                  </div>
                 </div>
               </div>
 
