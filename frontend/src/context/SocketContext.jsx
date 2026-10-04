@@ -28,7 +28,8 @@ export const SocketProvider = ({ children }) => {
 
  const socketUrl = import.meta.env.VITE_API_URL.replace('/api', '');
     const newSocket = io(socketUrl, { 
-  withCredentials: true, 
+  withCredentials: true,
+  transports: ['websocket', 'polling'], 
 });
     newSocket.on('connect', () => {
       console.log('🔌 Socket connecté');
@@ -76,3 +77,4 @@ export const SocketProvider = ({ children }) => {
 };
 
 export default SocketContext;
+
