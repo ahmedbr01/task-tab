@@ -1,11 +1,8 @@
 import axios from 'axios';
 
-const isNgrok = window.location.hostname.includes('ngrok-free.dev');
-
-const baseURL = `${window.location.origin}/api`;
+const baseURL = import.meta.env.VITE_API_URL;
 
 console.log(`🌐 Base URL: ${baseURL}`);
-console.log(`📡 Mode: ${isNgrok ? 'ngrok' : 'local'}`);
 
 const api = axios.create({
   baseURL: baseURL,
