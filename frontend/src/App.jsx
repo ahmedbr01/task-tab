@@ -40,7 +40,7 @@ import Reporting from './features/reporting/Reporting';
 import AdminDashboard from './features/admin/AdminDashboard';
 import AdminUsers from './features/admin/AdminUsers';
 import AdminCategories from './features/admin/AdminCategories';
-import Logs from './features/logs/Logs';
+import Logs from './features/logs/Logs.jsx';
 
 
 import { useAuth } from './context/AuthContext';
