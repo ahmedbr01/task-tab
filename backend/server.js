@@ -131,25 +131,15 @@ const allowedOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
   'http://localhost:5000',
+  'http://192.168.1.15:5000',
   'https://headlock-possible-exuberant.ngrok-free.dev',
-  'https://*.ngrok-free.dev' // Permet tous les sous-domaines ngrok
+  'https://*.ngrok-free.dev'
 ];
-
 app.use(cors({
-  origin: function (origin, callback) {
-    // Permettre les requêtes sans origin (comme les apps mobiles)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.some(o => origin.includes(o.replace('*', '')))) {
-      callback(null, true);
-    } else if (origin.includes('ngrok-free.dev')) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
+  origin: true,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
 // 🔥 SESSION MIS À JOUR POUR NGORK

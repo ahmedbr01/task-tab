@@ -4,7 +4,7 @@ const User = require('../models/User');
 const { validationResult } = require('express-validator');
 const { Op } = require('sequelize');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'task_tab_super_secret_key_for_jwt_2026';
+const JWT_SECRET = process.env.JWT_SECRET ;
 
 const generateToken = (user) => {
   return jwt.sign(
@@ -53,10 +53,9 @@ const login = async (req, res) => {
       });
     }
 
-    // Vérifier le mot de passe
+
     let isPasswordValid = false;
     
-    // Méthode 1: Utiliser comparePassword si disponible
     if (typeof user.comparePassword === 'function') {
       isPasswordValid = await user.comparePassword(password);
     } 

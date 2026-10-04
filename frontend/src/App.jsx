@@ -33,22 +33,16 @@ import Export from './features/export/Export';
 import Profile from './features/profile/Profile';
 import Notifications from './features/notifications/Notifications';
 
-// ============================================
-// 🔥 PAGE REPORTING (AJOUTÉE)
-// ============================================
+
 import Reporting from './features/reporting/Reporting';
 
-// ============================================
-// PAGES ADMIN
-// ============================================
+
 import AdminDashboard from './features/admin/AdminDashboard';
 import AdminUsers from './features/admin/AdminUsers';
 import AdminCategories from './features/admin/AdminCategories';
 import Logs from './features/logs/Logs';
 
-// ============================================
-// PROTECTION DES ROUTES
-// ============================================
+
 import { useAuth } from './context/AuthContext';
 
 const ProtectedRoute = ({ children, requiredRole }) => {
@@ -73,9 +67,7 @@ const ProtectedRoute = ({ children, requiredRole }) => {
   return children;
 };
 
-// ============================================
-// COMPOSANT PRINCIPAL
-// ============================================
+
 function App() {
   return (
     <ThemeProvider>
@@ -96,10 +88,10 @@ function App() {
                 theme="light"
               />
               <Routes>
-                {/* ROUTE LOGIN UNIQUEMENT */}
+                
                 <Route path="/login" element={<Login />} />
 
-                {/* ROUTES PROTÉGÉES */}
+                
                 <Route
                   path="/"
                   element={
@@ -119,7 +111,7 @@ function App() {
                   <Route path="correspondence" element={<Correspondence />} />
                   <Route path="axes" element={<Axes />} />
                   
-                  {/* 🔥 ROUTE REPORTING AJOUTÉE */}
+                  
                   <Route 
                     path="reporting" 
                     element={
@@ -134,7 +126,7 @@ function App() {
                   <Route path="profile" element={<Profile />} />
                   <Route path="notifications" element={<Notifications />} />
 
-                  {/* ROUTES ADMIN */}
+                  
                   <Route
                     path="admin/dashboard"
                     element={
@@ -169,7 +161,7 @@ function App() {
                   />
                 </Route>
 
-                {/* ROUTE 404 */}
+                
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />
               </Routes>
             </BrowserRouter>

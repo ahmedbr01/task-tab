@@ -27,9 +27,7 @@ const Axe = sequelize.define('Axe', {
     type: DataTypes.INTEGER,
     defaultValue: 0,
   },
-  // ============================================
-  // 🔥 NOUVEAU : CHAMPS BUDGET
-  // ============================================
+  
   budget_total: {
     type: DataTypes.DECIMAL(15, 2),
     allowNull: true,

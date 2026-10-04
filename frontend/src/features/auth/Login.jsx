@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-toastify';
 import { Eye, EyeOff, User, Lock, ShieldCheck, LogIn } from 'lucide-react';
-import logo from '../../assets/logo.png'; // 🔥 Assurez-vous d'avoir le logo
+import logo from '../../assets/logo.png'; 
 
 const Login = () => {
   const [formData, setFormData] = useState({ username: '', password: '' });

@@ -93,9 +93,6 @@ const Layout = () => {
     );
   };
 
-  // ============================================
-  // ITEMS DU MENU
-  // ============================================
   const menuItems = [
     { path: '/dashboard', icon: <Home className="w-4 h-4" />, label: 'لوحة القيادة' },
     { path: '/projects', icon: <FolderKanban className="w-4 h-4" />, label: 'المشاريع' },
@@ -106,9 +103,6 @@ const Layout = () => {
     { path: '/documents', icon: <FileText className="w-4 h-4" />, label: 'الوثائق' },
     { path: '/correspondence', icon: <FileText className="w-4 h-4" />, label: 'المراسلات' },
     { path: '/axes', icon: <Database className="w-4 h-4" />, label: 'المحاور' },
-    // ============================================
-    // 🔥 REPORTING - AJOUTÉ DANS LE MENU
-    // ============================================
     { path: '/reporting', icon: <BarChart3 className="w-4 h-4" />, label: 'التقارير' },
     { path: '/search', icon: <Search className="w-4 h-4" />, label: 'بحث متقدم' },
     { path: '/export', icon: <FileBarChart className="w-4 h-4" />, label: 'تصدير' },

@@ -26,10 +26,9 @@ export const SocketProvider = ({ children }) => {
       return;
     }
 
-    const newSocket = io('http://localhost:5000', {
-      withCredentials: true,
-    });
-
+ const newSocket = io(window.location.origin, { 
+  withCredentials: true, 
+});
     newSocket.on('connect', () => {
       console.log('🔌 Socket connecté');
       newSocket.emit('register', user.id);

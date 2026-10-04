@@ -11,12 +11,11 @@ const {
 } = require('../controllers/auth.controller');
 const { uploadAvatar: uploadAvatarMiddleware } = require('../config/upload');
 
-// Correction : Accepter email OU username pour la connexion
+
 const loginValidation = [
   body('email').optional().notEmpty().withMessage('Email requis'),
   body('username').optional().notEmpty().withMessage('Nom d\'utilisateur requis'),
   body('password').notEmpty().withMessage('Mot de passe requis'),
-  // Validation personnalisée pour s'assurer qu'au moins un champ est fourni
   body().custom((value, { req }) => {
     if (!req.body.email && !req.body.username) {
       throw new Error('Email ou nom d\'utilisateur requis');

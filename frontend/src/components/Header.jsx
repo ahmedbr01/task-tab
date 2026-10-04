@@ -29,9 +29,7 @@ const Header = () => {
     setShowDropdown(false);
   };
 
-  // ============================================
-  // 🔥 FONCTION POUR OBTENIR LES INITIALES
-  // ============================================
+
   const getInitials = () => {
     if (!user) return 'U';
     if (user.full_name) {
@@ -44,9 +42,7 @@ const Header = () => {
     return user.username?.[0]?.toUpperCase() || 'U';
   };
 
-  // ============================================
-  // 🔥 RENDU DE L'AVATAR
-  // ============================================
+
   const renderAvatar = (size = 'w-8 h-8') => {
     if (!user) return null;
 
