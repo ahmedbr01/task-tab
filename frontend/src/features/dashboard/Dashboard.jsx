@@ -43,29 +43,11 @@ const Dashboard = () => {
     const fetchData = async () => {
       try {
         // Utilisation de l'API configurée avec les chemins relatifs
-        const token = localStorage.getItem('token');
-        
-        // Si vous utilisez fetch directement (avec chemins relatifs)
-        const [statsRes, tasksRes, projectsRes] = await Promise.all([
-          fetch('/api/dashboard/stats', {
-            headers: { 'Authorization': 'Bearer ' + token }
-          }),
-          fetch('/api/tasks/stats', {
-            headers: { 'Authorization': 'Bearer ' + token }
-          }),
-          fetch('/api/projects?limit=20', {
-            headers: { 'Authorization': 'Bearer ' + token }
-          })
-        ]);
+        const [statsRes, tasksRes, projectsRes] = await Promise.all([dashboardApi.getStats(), taskApi.getStats(), projectApi.getAll({ limit: 20 })]);
 
-        // Vérifier les réponses
-        if (!statsRes.ok || !tasksRes.ok || !projectsRes.ok) {
-          throw new Error('Erreur lors du chargement des données');
-        }
-
-        const statsData = await statsRes.json();
-        const tasksData = await tasksRes.json();
-        const projectsData = await projectsRes.json();
+        const statsData = statsRes.data;
+        const tasksData = tasksRes.data;
+        const projectsData = projectsRes.data;
 
         setData({
           stats: statsData?.stats || statsData || {},
