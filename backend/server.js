@@ -174,17 +174,30 @@ app.use(morgan('dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// ============================================
-// CORRECTION CSRF ICI
-// ============================================
 app.use(cookieParser());
 const csrfProtection = csrf({ cookie: true });
 
-// 1. On génère le token pour toutes les requêtes (pour que le front l'ait au Login)
+// On applique la protection CSRF de manière globale sur l'API
+app.use('/api', csrfProtection);
+
+// On crée un middleware pour générer le token à chaque requête
 app.use((req, res, next) => {
-  res.cookie('XSRF-TOKEN', req.csrfToken(), { sameSite: 'lax' }); 
-  res.setHeader('X-CSRF-Token', req.csrfToken());
+  // La fonction existe maintenant car le middleware ci-dessus est passé
+  const token = req.csrfToken();
+  res.cookie('XSRF-TOKEN', token, { sameSite: 'lax' });
+  res.setHeader('X-CSRF-Token', token);
   next();
+});
+
+// 🔥 LA LIGNE MAGIQUE : On ignore l'erreur CSRF UNIQUEMENT pour le Login
+app.use((err, req, res, next) => {
+  if (err.code === 'EBADCSRFTOKEN' && req.path === '/api/auth/login') {
+    return next(); // On laisse passer la requête de login
+  }
+  if (err.code === 'EBADCSRFTOKEN') {
+    return res.status(403).json({ message: "Erreur CSRF : Token invalide" });
+  }
+  next(err);
 });
 
 app.use(logRequest);
