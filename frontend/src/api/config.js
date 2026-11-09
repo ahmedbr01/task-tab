@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const baseURL = import.meta.env.VITE_API_URL;
+const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 const api = axios.create({
   baseURL: baseURL,
@@ -8,36 +8,36 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
   timeout: 30000, 
-  withCredentials: true, // IMPORTANT : Permet de recevoir le cookie CSRF
+  withCredentials: true, // INDISPENSABLE pour recevoir le cookie CSRF
 });
 
-// Intercepteur de requête : Ajoute le JWT ET le token CSRF
+// Intercepteur de requête
 api.interceptors.request.use(
   (config) => {
-    // 1. Ajouter le JWT
+    // 1. JWT
     const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-
-    // 2. Ajouter le token CSRF (si présent)
-    const csrfToken = localStorage.getItem('csrfToken');
-    if (csrfToken) {
-      config.headers['CSRF-Token'] = csrfToken;
+    
+    // 2. Token CSRF depuis les cookies
+    const match = document.cookie.match(new RegExp('(^| )XSRF-TOKEN=([^;]+)'));
+    if (match) {
+      config.headers['CSRF-Token'] = match[2];
     }
-
+    
     return config;
   },
   (error) => Promise.reject(error)
 );
 
-// Intercepteur de réponse : Sauvegarde le nouveau token CSRF
+// Intercepteur de réponse
 api.interceptors.response.use(
   (response) => {
-    // On récupère le token CSRF depuis le header du serveur
-    const newCsrfToken = response.headers['x-csrf-token'];
-    if (newCsrfToken) {
-      localStorage.setItem('csrfToken', newCsrfToken);
+    // Sauvegarder le nouveau token CSRF si le serveur en envoie un
+    const csrfToken = response.headers['x-csrf-token'];
+    if (csrfToken) {
+       document.cookie = `XSRF-TOKEN=${csrfToken}; path=/; SameSite=Lax`;
     }
     return response;
   },

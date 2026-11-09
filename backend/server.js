@@ -37,18 +37,8 @@ const Log = require('./src/models/Log');
 // DÉFINIR LES ASSOCIATIONS
 // ============================================
 const models = { 
-  User, 
-  Category, 
-  Axe, 
-  Project, 
-  Action, 
-  Task, 
-  Message, 
-  Document, 
-  Correspondence,
-  Notification,
-  Subscription,
-  Log
+  User, Category, Axe, Project, Action, Task, Message, Document, 
+  Correspondence, Notification, Subscription, Log
 };
 
 Object.values(models).forEach(model => {
@@ -96,7 +86,6 @@ io.on('connection', (socket) => {
     io.emit('online-users', Array.from(onlineUsers.keys()));
   });
 
-  // Messages privés
   socket.on('private-message', (data) => {
     const { receiverId, message } = data;
     const receiverSocketId = onlineUsers.get(receiverId);
@@ -105,7 +94,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Tâches assignées
   socket.on('task-assigned', (data) => {
     const { userId, task } = data;
     const userSocketId = onlineUsers.get(userId);
@@ -114,7 +102,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Notifications
   socket.on('notification', (data) => {
     const { userId, notification } = data;
     const userSocketId = onlineUsers.get(userId);
@@ -125,46 +112,29 @@ io.on('connection', (socket) => {
 });
 
 // ============================================
-// MIDDLEWARES
+// MIDDLEWARES DE BASE
 // ============================================
 
-// 🔥 CORS MIS À JOUR POUR NGORK
-const allowedOrigins = [
-  'http://localhost:5173',
-  'http://127.0.0.1:5173',
-  'http://localhost:5000',
-  'http://192.168.1.15:5000',
-  'https://headlock-possible-exuberant.ngrok-free.dev',
-  'https://*.ngrok-free.dev'
-];
 app.use(cors({
   origin: true,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: [
-    'Content-Type',
-    'Authorization',
-    'X-Requested-With',
-    'CSRF-Token',
-    'X-CSRF-Token'
-  ],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'CSRF-Token', 'X-CSRF-Token'],
   exposedHeaders: ['X-CSRF-Token']
 }));
 
-// 🔥 SESSION MIS À JOUR POUR NGORK
 app.use(session({
   secret: process.env.SESSION_SECRET || 'task-tab-secret-key-2024',
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: false, // ⚠️ IMPORTANT : false pour ngrok (HTTPS non valide)
+    secure: false, // false pour ngrok et localhost
     httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000, // 24 heures
-    sameSite: 'lax' // Permet les requêtes cross-origin
+    maxAge: 24 * 60 * 60 * 1000, 
+    sameSite: 'lax' 
   }
 }));
 
-// Helmet avec CSP désactivé pour ngrok
 app.use(helmet({
   contentSecurityPolicy: false,
   crossOriginResourcePolicy: { policy: "cross-origin" },
@@ -175,36 +145,9 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 app.use(cookieParser());
-const csrfProtection = csrf({ cookie: true });
-
-// On applique la protection CSRF de manière globale sur l'API
-app.use('/api', csrfProtection);
-
-// On crée un middleware pour générer le token à chaque requête
-app.use((req, res, next) => {
-  // La fonction existe maintenant car le middleware ci-dessus est passé
-  const token = req.csrfToken();
-  res.cookie('XSRF-TOKEN', token, { sameSite: 'lax' });
-  res.setHeader('X-CSRF-Token', token);
-  next();
-});
-
-// 🔥 LA LIGNE MAGIQUE : On ignore l'erreur CSRF UNIQUEMENT pour le Login
-app.use((err, req, res, next) => {
-  if (err.code === 'EBADCSRFTOKEN' && req.path === '/api/auth/login') {
-    return next(); // On laisse passer la requête de login
-  }
-  if (err.code === 'EBADCSRFTOKEN') {
-    return res.status(403).json({ message: "Erreur CSRF : Token invalide" });
-  }
-  next(err);
-});
-
-app.use(logRequest);
 
 // Headers supplémentaires pour ngrok
 app.use((req, res, next) => {
-  // Autoriser l'origine dynamique pour ngrok
   const origin = req.headers.origin;
   if (origin && origin.includes('ngrok-free.dev')) {
     res.header('Access-Control-Allow-Origin', origin);
@@ -220,49 +163,70 @@ app.use((req, res, next) => {
   next();
 });
 
-// Servir les fichiers statiques (uploads)
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// ============================================
+// PROTECTION CSRF (CORRIGÉE)
+// ============================================
+const csrfProtection = csrf({ cookie: true });
+
+// On applique la protection sur toutes les routes de l'API
+app.use('/api', csrfProtection);
+
+// Ce middleware génère le token et l'envoie dans le cookie et le header
+app.use('/api', (req, res, next) => {
+  res.cookie('XSRF-TOKEN', req.csrfToken(), { sameSite: 'lax' }); 
+  res.setHeader('X-CSRF-Token', req.csrfToken());
+  next();
+});
+
+// Gestion spéciale pour le Login : on ignore l'erreur si le token manque au login
+app.use((err, req, res, next) => {
+  if (err.code === 'EBADCSRFTOKEN' && req.path === '/api/auth/login') {
+    return next(); // Laisse passer le login
+  }
+  if (err.code === 'EBADCSRFTOKEN') {
+    return res.status(403).json({ success: false, message: "Erreur CSRF : Token invalide" });
+  }
+  next(err);
+});
 
 // ============================================
-// FRONTEND - SERVIR LES FICHIERS STATIQUES
+// LOGGING ET FICHIERS STATIQUES
 // ============================================
+app.use(logRequest);
+
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 const frontendPath = path.join(__dirname, '..', 'frontend', 'dist');
 if (fs.existsSync(frontendPath)) {
   app.use(express.static(frontendPath));
   console.log('📁 Frontend path:', frontendPath);
-} else {
-  console.log('⚠️ Dossier frontend/dist non trouvé. Exécutez "npm run build" dans frontend');
 }
 
 // ============================================
-// ROUTES API (CORRIGÉES)
+// ROUTES API
 // ============================================
-
-// 2. Route Auth PUBLIQUE (Pas de CSRF pour pouvoir se connecter)
 app.use('/api/auth', require('./src/routes/auth.routes'));
-
-// 3. Routes PROTÉGÉES (Avec CSRF)
-app.use('/api/users', csrfProtection, require('./src/routes/user.routes'));
-app.use('/api/axes', csrfProtection, require('./src/routes/axe.routes'));
-app.use('/api/projects', csrfProtection, require('./src/routes/project.routes'));
-app.use('/api/actions', csrfProtection, require('./src/routes/action.routes'));
-app.use('/api/tasks', csrfProtection, require('./src/routes/task.routes'));
-app.use('/api/messages', csrfProtection, require('./src/routes/message.routes'));
-app.use('/api/documents', csrfProtection, require('./src/routes/document.routes'));
-app.use('/api/dashboard', csrfProtection, require('./src/routes/dashboard.routes'));
-app.use('/api/reports', csrfProtection, require('./src/routes/report.routes'));
-app.use('/api/calendar', csrfProtection, require('./src/routes/calendar.routes'));
-app.use('/api/categories', csrfProtection, require('./src/routes/category.routes'));
-app.use('/api/admin/dashboard', csrfProtection, require('./src/routes/admin.dashboard.routes'));
-app.use('/api/correspondence', csrfProtection, require('./src/routes/correspondence.routes'));
-app.use('/api/gantt', csrfProtection, require('./src/routes/gantt.routes'));
-app.use('/api/search', csrfProtection, require('./src/routes/search.routes'));
-app.use('/api/notifications', csrfProtection, require('./src/routes/notification.routes'));
-app.use('/api/logs', csrfProtection, require('./src/routes/log.routes'));
-app.use('/api/export', csrfProtection, require('./src/routes/export.routes'));
+app.use('/api/users', require('./src/routes/user.routes'));
+app.use('/api/axes', require('./src/routes/axe.routes'));
+app.use('/api/projects', require('./src/routes/project.routes'));
+app.use('/api/actions', require('./src/routes/action.routes'));
+app.use('/api/tasks', require('./src/routes/task.routes'));
+app.use('/api/messages', require('./src/routes/message.routes'));
+app.use('/api/documents', require('./src/routes/document.routes'));
+app.use('/api/dashboard', require('./src/routes/dashboard.routes'));
+app.use('/api/reports', require('./src/routes/report.routes'));
+app.use('/api/calendar', require('./src/routes/calendar.routes'));
+app.use('/api/categories', require('./src/routes/category.routes'));
+app.use('/api/admin/dashboard', require('./src/routes/admin.dashboard.routes'));
+app.use('/api/correspondence', require('./src/routes/correspondence.routes'));
+app.use('/api/gantt', require('./src/routes/gantt.routes'));
+app.use('/api/search', require('./src/routes/search.routes'));
+app.use('/api/notifications', require('./src/routes/notification.routes'));
+app.use('/api/logs', require('./src/routes/log.routes'));
+app.use('/api/export', require('./src/routes/export.routes'));
 
 // ============================================
-// FALLBACK FRONTEND (toutes les routes non API)
+// FALLBACK FRONTEND (SPA)
 // ============================================
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api')) {
@@ -272,7 +236,7 @@ app.get('*', (req, res) => {
   if (fs.existsSync(indexHtml)) {
     res.sendFile(indexHtml);
   } else {
-    res.status(404).send('Frontend non trouvé. Exécutez "npm run build" dans le dossier frontend');
+    res.status(404).send('Frontend non trouvé.');
   }
 });
 
@@ -302,20 +266,15 @@ const PORT = process.env.PORT || 5000;
 
 async function startServer() {
   try {
-    // Tester la connexion à la base de données
     await sequelize.authenticate();
     console.log('✅ Connexion à MySQL établie avec succès');
 
-    // Synchroniser les modèles
     await sequelize.sync({ alter: false });
     console.log('✅ Modèles synchronisés');
 
-    // Démarrer le serveur
-    server.listen(PORT, '0.0.0.0', () => { // Écoute sur toutes les interfaces
+    server.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Serveur démarré sur http://localhost:${PORT}`);
       console.log(`🔌 Socket.io prêt`);
-      console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
-      console.log(`🗄️  Database: ${process.env.DB_NAME || 'task_tab_db'}`);
     });
   } catch (error) {
     console.error('❌ Erreur de connexion à MySQL:', error);
@@ -325,12 +284,4 @@ async function startServer() {
 
 startServer();
 
-// ============================================
-// EXPORTER POUR LES AUTRES FICHIERS
-// ============================================
-module.exports = { 
-  io, 
-  onlineUsers,
-  app,
-  server,
-};
+module.exports = { io, onlineUsers, app, server };
