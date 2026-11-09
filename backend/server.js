@@ -7,9 +7,7 @@ const path = require('path');
 const http = require('http');
 const socketIo = require('socket.io');
 const fs = require('fs');
-const session = require('express-session'); 
-const cookieParser = require('cookie-parser');
-const csrf = require('csurf');
+const session = require('express-session'); // AJOUTÉ
 
 dotenv.config();
 
@@ -37,8 +35,18 @@ const Log = require('./src/models/Log');
 // DÉFINIR LES ASSOCIATIONS
 // ============================================
 const models = { 
-  User, Category, Axe, Project, Action, Task, Message, Document, 
-  Correspondence, Notification, Subscription, Log
+  User, 
+  Category, 
+  Axe, 
+  Project, 
+  Action, 
+  Task, 
+  Message, 
+  Document, 
+  Correspondence,
+  Notification,
+  Subscription,
+  Log
 };
 
 Object.values(models).forEach(model => {
@@ -86,6 +94,7 @@ io.on('connection', (socket) => {
     io.emit('online-users', Array.from(onlineUsers.keys()));
   });
 
+  // Messages privés
   socket.on('private-message', (data) => {
     const { receiverId, message } = data;
     const receiverSocketId = onlineUsers.get(receiverId);
@@ -94,6 +103,7 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Tâches assignées
   socket.on('task-assigned', (data) => {
     const { userId, task } = data;
     const userSocketId = onlineUsers.get(userId);
@@ -102,6 +112,7 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Notifications
   socket.on('notification', (data) => {
     const { userId, notification } = data;
     const userSocketId = onlineUsers.get(userId);
@@ -112,29 +123,39 @@ io.on('connection', (socket) => {
 });
 
 // ============================================
-// MIDDLEWARES DE BASE
+// MIDDLEWARES
 // ============================================
 
+// 🔥 CORS MIS À JOUR POUR NGORK
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://localhost:5000',
+  'http://192.168.1.15:5000',
+  'https://headlock-possible-exuberant.ngrok-free.dev',
+  'https://*.ngrok-free.dev'
+];
 app.use(cors({
   origin: true,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'CSRF-Token', 'X-CSRF-Token'],
-  exposedHeaders: ['X-CSRF-Token']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
+// 🔥 SESSION MIS À JOUR POUR NGORK
 app.use(session({
   secret: process.env.SESSION_SECRET || 'task-tab-secret-key-2024',
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: false, // false pour ngrok et localhost
+    secure: false, // ⚠️ IMPORTANT : false pour ngrok (HTTPS non valide)
     httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000, 
-    sameSite: 'lax' 
+    maxAge: 24 * 60 * 60 * 1000, // 24 heures
+    sameSite: 'lax' // Permet les requêtes cross-origin
   }
 }));
 
+// Helmet avec CSP désactivé pour ngrok
 app.use(helmet({
   contentSecurityPolicy: false,
   crossOriginResourcePolicy: { policy: "cross-origin" },
@@ -144,10 +165,14 @@ app.use(morgan('dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-app.use(cookieParser());
+// ============================================
+// LOGGING MIDDLEWARE (LOG & AUDIT)
+// ============================================
+app.use(logRequest);
 
 // Headers supplémentaires pour ngrok
 app.use((req, res, next) => {
+  // Autoriser l'origine dynamique pour ngrok
   const origin = req.headers.origin;
   if (origin && origin.includes('ngrok-free.dev')) {
     res.header('Access-Control-Allow-Origin', origin);
@@ -156,50 +181,25 @@ app.use((req, res, next) => {
   }
   res.header('Access-Control-Allow-Credentials', 'true');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, CSRF-Token, X-CSRF-Token');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
   }
   next();
 });
 
-// ============================================
-// PROTECTION CSRF (CORRIGÉE)
-// ============================================
-const csrfProtection = csrf({ cookie: true });
-
-// On applique la protection sur toutes les routes de l'API
-app.use('/api', csrfProtection);
-
-// Ce middleware génère le token et l'envoie dans le cookie et le header
-app.use('/api', (req, res, next) => {
-  res.cookie('XSRF-TOKEN', req.csrfToken(), { sameSite: 'lax' }); 
-  res.setHeader('X-CSRF-Token', req.csrfToken());
-  next();
-});
-
-// Gestion spéciale pour le Login : on ignore l'erreur si le token manque au login
-app.use((err, req, res, next) => {
-  if (err.code === 'EBADCSRFTOKEN' && req.path === '/api/auth/login') {
-    return next(); // Laisse passer le login
-  }
-  if (err.code === 'EBADCSRFTOKEN') {
-    return res.status(403).json({ success: false, message: "Erreur CSRF : Token invalide" });
-  }
-  next(err);
-});
-
-// ============================================
-// LOGGING ET FICHIERS STATIQUES
-// ============================================
-app.use(logRequest);
-
+// Servir les fichiers statiques (uploads)
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// ============================================
+// FRONTEND - SERVIR LES FICHIERS STATIQUES
+// ============================================
 const frontendPath = path.join(__dirname, '..', 'frontend', 'dist');
 if (fs.existsSync(frontendPath)) {
   app.use(express.static(frontendPath));
   console.log('📁 Frontend path:', frontendPath);
+} else {
+  console.log('⚠️ Dossier frontend/dist non trouvé. Exécutez "npm run build" dans frontend');
 }
 
 // ============================================
@@ -226,7 +226,7 @@ app.use('/api/logs', require('./src/routes/log.routes'));
 app.use('/api/export', require('./src/routes/export.routes'));
 
 // ============================================
-// FALLBACK FRONTEND (SPA)
+// FALLBACK FRONTEND (toutes les routes non API)
 // ============================================
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api')) {
@@ -236,7 +236,7 @@ app.get('*', (req, res) => {
   if (fs.existsSync(indexHtml)) {
     res.sendFile(indexHtml);
   } else {
-    res.status(404).send('Frontend non trouvé.');
+    res.status(404).send('Frontend non trouvé. Exécutez "npm run build" dans le dossier frontend');
   }
 });
 
@@ -266,15 +266,20 @@ const PORT = process.env.PORT || 5000;
 
 async function startServer() {
   try {
+    // Tester la connexion à la base de données
     await sequelize.authenticate();
     console.log('✅ Connexion à MySQL établie avec succès');
 
+    // Synchroniser les modèles
     await sequelize.sync({ alter: false });
     console.log('✅ Modèles synchronisés');
 
-    server.listen(PORT, '0.0.0.0', () => {
+    // Démarrer le serveur
+    server.listen(PORT, '0.0.0.0', () => { // Écoute sur toutes les interfaces
       console.log(`🚀 Serveur démarré sur http://localhost:${PORT}`);
       console.log(`🔌 Socket.io prêt`);
+      console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`🗄️  Database: ${process.env.DB_NAME || 'task_tab_db'}`);
     });
   } catch (error) {
     console.error('❌ Erreur de connexion à MySQL:', error);
@@ -284,4 +289,12 @@ async function startServer() {
 
 startServer();
 
-module.exports = { io, onlineUsers, app, server };
+// ============================================
+// EXPORTER POUR LES AUTRES FICHIERS
+// ============================================
+module.exports = { 
+  io, 
+  onlineUsers,
+  app,
+  server,
+};
