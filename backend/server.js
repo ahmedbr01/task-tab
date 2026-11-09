@@ -7,7 +7,9 @@ const path = require('path');
 const http = require('http');
 const socketIo = require('socket.io');
 const fs = require('fs');
-const session = require('express-session'); // AJOUTÉ
+const session = require('express-session'); 
+const cookieParser = require('cookie-parser');
+const csrf = require('csurf');
 
 dotenv.config();
 
@@ -139,7 +141,14 @@ app.use(cors({
   origin: true,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'CSRF-Token',
+    'X-CSRF-Token'
+  ],
+  exposedHeaders: ['X-CSRF-Token']
 }));
 
 // 🔥 SESSION MIS À JOUR POUR NGORK
@@ -165,9 +174,16 @@ app.use(morgan('dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// ============================================
-// LOGGING MIDDLEWARE (LOG & AUDIT)
-// ============================================
+app.use(cookieParser());
+const csrfProtection = csrf({ cookie: true });
+
+app.use('/api', csrfProtection, (req, res, next) => {
+
+  res.cookie('XSRF-TOKEN', req.csrfToken(), { sameSite: 'lax' }); 
+  res.setHeader('X-CSRF-Token', req.csrfToken());
+  next();
+});
+
 app.use(logRequest);
 
 // Headers supplémentaires pour ngrok

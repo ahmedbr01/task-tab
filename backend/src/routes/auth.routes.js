@@ -2,6 +2,7 @@ const express = require('express');
 const { body } = require('express-validator');
 const router = express.Router();
 const { auth } = require('../middleware/auth.middleware');
+const csrfProtection = require('csurf')({ cookie: true });
 const {
   login,
   getProfile,
@@ -31,7 +32,10 @@ const passwordValidation = [
     .withMessage('Le nouveau mot de passe doit contenir au moins 6 caractères'),
 ];
 
-router.post('/login', loginValidation, login);
+router.post('/login', (req, res, next) => {
+  req.csrfToken = () => 'bypass'; 
+  next();
+}, loginValidation, login);
 router.get('/profile', auth, getProfile);
 router.put('/profile', auth, updateProfile);
 router.put('/change-password', auth, passwordValidation, changePassword);
