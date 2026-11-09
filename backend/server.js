@@ -174,11 +174,14 @@ app.use(morgan('dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// ============================================
+// CORRECTION CSRF ICI
+// ============================================
 app.use(cookieParser());
 const csrfProtection = csrf({ cookie: true });
 
-app.use('/api', csrfProtection, (req, res, next) => {
-
+// 1. On génère le token pour toutes les requêtes (pour que le front l'ait au Login)
+app.use((req, res, next) => {
   res.cookie('XSRF-TOKEN', req.csrfToken(), { sameSite: 'lax' }); 
   res.setHeader('X-CSRF-Token', req.csrfToken());
   next();
@@ -197,7 +200,7 @@ app.use((req, res, next) => {
   }
   res.header('Access-Control-Allow-Credentials', 'true');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, CSRF-Token, X-CSRF-Token');
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
   }
@@ -219,27 +222,31 @@ if (fs.existsSync(frontendPath)) {
 }
 
 // ============================================
-// ROUTES API
+// ROUTES API (CORRIGÉES)
 // ============================================
+
+// 2. Route Auth PUBLIQUE (Pas de CSRF pour pouvoir se connecter)
 app.use('/api/auth', require('./src/routes/auth.routes'));
-app.use('/api/users', require('./src/routes/user.routes'));
-app.use('/api/axes', require('./src/routes/axe.routes'));
-app.use('/api/projects', require('./src/routes/project.routes'));
-app.use('/api/actions', require('./src/routes/action.routes'));
-app.use('/api/tasks', require('./src/routes/task.routes'));
-app.use('/api/messages', require('./src/routes/message.routes'));
-app.use('/api/documents', require('./src/routes/document.routes'));
-app.use('/api/dashboard', require('./src/routes/dashboard.routes'));
-app.use('/api/reports', require('./src/routes/report.routes'));
-app.use('/api/calendar', require('./src/routes/calendar.routes'));
-app.use('/api/categories', require('./src/routes/category.routes'));
-app.use('/api/admin/dashboard', require('./src/routes/admin.dashboard.routes'));
-app.use('/api/correspondence', require('./src/routes/correspondence.routes'));
-app.use('/api/gantt', require('./src/routes/gantt.routes'));
-app.use('/api/search', require('./src/routes/search.routes'));
-app.use('/api/notifications', require('./src/routes/notification.routes'));
-app.use('/api/logs', require('./src/routes/log.routes'));
-app.use('/api/export', require('./src/routes/export.routes'));
+
+// 3. Routes PROTÉGÉES (Avec CSRF)
+app.use('/api/users', csrfProtection, require('./src/routes/user.routes'));
+app.use('/api/axes', csrfProtection, require('./src/routes/axe.routes'));
+app.use('/api/projects', csrfProtection, require('./src/routes/project.routes'));
+app.use('/api/actions', csrfProtection, require('./src/routes/action.routes'));
+app.use('/api/tasks', csrfProtection, require('./src/routes/task.routes'));
+app.use('/api/messages', csrfProtection, require('./src/routes/message.routes'));
+app.use('/api/documents', csrfProtection, require('./src/routes/document.routes'));
+app.use('/api/dashboard', csrfProtection, require('./src/routes/dashboard.routes'));
+app.use('/api/reports', csrfProtection, require('./src/routes/report.routes'));
+app.use('/api/calendar', csrfProtection, require('./src/routes/calendar.routes'));
+app.use('/api/categories', csrfProtection, require('./src/routes/category.routes'));
+app.use('/api/admin/dashboard', csrfProtection, require('./src/routes/admin.dashboard.routes'));
+app.use('/api/correspondence', csrfProtection, require('./src/routes/correspondence.routes'));
+app.use('/api/gantt', csrfProtection, require('./src/routes/gantt.routes'));
+app.use('/api/search', csrfProtection, require('./src/routes/search.routes'));
+app.use('/api/notifications', csrfProtection, require('./src/routes/notification.routes'));
+app.use('/api/logs', csrfProtection, require('./src/routes/log.routes'));
+app.use('/api/export', csrfProtection, require('./src/routes/export.routes'));
 
 // ============================================
 // FALLBACK FRONTEND (toutes les routes non API)
